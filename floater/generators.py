@@ -281,6 +281,114 @@ class FloatSet(object):
         flt_matrix[0,8] = -1
 
         return flt_matrix.tofile(filename)
+    
+    def to_local_pickup(self, filename, tstart=0, iup=0, mesh='rect',
+                         read_binary_prec=64,kfloat=-0.5,itop=0,
+                        dx=0,dy=0,nx=0,ny=0):
+        """Output floatset data in MITgcm format
+
+        PARAMETERS
+        ----------
+        filename : str
+            The filename to save the floatset data in
+            (e.g.pickup_flt.0000000001)
+        tstart : float
+            time for float initialisation (default = 0)
+        iup : int
+            flag if the float
+                - should profile ( > 0 = return cycle (in s) to surface)
+                - remain at depth ( = 0 )
+                - is a 3D float ( = -1 )
+                - should be advected WITHOUT additional noise (= -2 );
+                    (this implies that the float is non-profiling)
+                - is a mooring ( = -3 ); i.e. the float is not advected
+        mesh : {'rect', 'hex'}
+            - 'rect' : rectangular cartesian
+            - 'hex' : hexagonal
+        read_binary_prec : {32, 64}
+            data precision for binary file (should match MITgcm data file)
+        """
+        nTx=nx//dx
+        nTy=ny//dy
+        if not (float(nx)/float(dx)).is_integer():
+                raise ValueError("nx is not divisible evenly by dx")
+        if not (float(ny)/float(dy)).is_integer():
+                raise ValueError("ny is not divisible evenly by dy")
+        
+        if read_binary_prec==32:
+            dtype = np.dtype('>f4')
+        elif read_binary_prec==64:
+            dtype = np.dtype('>f8')
+        else:
+            raise ValueError('read_binary_prec should be 32 or 64; '
+                             'got %g' % read_binary_prec )
+        
+
+        if mesh == 'hex' and self.dims==3:
+            xx, yy, zz = self.get_hexmesh()
+        elif mesh == 'hex' and self.dims==2:
+            xx, yy = self.get_hexmesh()
+        elif self.dims==3:
+            xx, yy, zz = self.get_rectmesh()
+        else:
+            xx, yy = self.get_rectmesh()
+        myx = xx
+
+        # initial positions
+        lon = myx.ravel()
+        lat = yy.ravel()
+        if self.dims==2:
+            kpart=-0.5
+        else:
+            kpart=zz.ravel()
+            
+        # end time of integration of float (in s); note if tend = 1 floats are
+        # integrated till the end of the integration;
+        tend = -1;
+        Nfloat=len(lon)
+        float1=0
+        
+        for Tnx in range(0,nTx):
+            mask=(lon > self.model_grid['lon'][Tnx]) & (lon < self.model_grid['lon'][dx*(Tnx+1)-1])
+            lon=lon[mask]
+            lat=lat[mask]
+            if self.dims!=2:
+                kpart=kpart[mask]
+                ik=np.interp(-kpart,-self.model_grid['rc'],np.arange(0,self.model_grid['rc'].size))
+            else:
+                ik=0.5
+            # number of floats
+            N = len(lon)
+            
+            ilon=(lon-self.model_grid['lon'][Tnx])/(self.model_grid['lon'][Tnx+1]-self.model_grid['lon'][Tnx])
+            ilat=(lon-self.model_grid['lat'][0])/(self.model_grid['lat'][1]-self.model_grid['lat'][0])
+
+            output_dtype = np.dtype(dtype)
+            # for all the float data
+            flt_matrix = np.zeros((N+1,9), dtype=output_dtype)
+
+            flt_matrix[1:,0] = np.arange(N)+1+float1
+            flt_matrix[1:,1] = tstart
+            flt_matrix[1:,2] = ilon
+            flt_matrix[1:,3] = ilat
+            flt_matrix[1:,4] = ik
+            flt_matrix[1:,5] = kfloat
+            flt_matrix[1:,6] = iup
+            flt_matrix[1:,7] = itop
+            flt_matrix[1:,8] = tend
+
+            # first line in initialization file contains a record with
+            # - the number of floats on that tile in the first record
+            # - the total number of floats in the sixth record
+
+            flt_matrix[0,0] = N;
+            flt_matrix[0,1] = -1
+            flt_matrix[0,4] = -1
+            flt_matrix[0,5] = N
+            flt_matrix[0,8] = -1
+            flt_matrix.tofile(filename + '.%03d' % (Tnx+1) + '.001.data')
+            float1=float1+N
+        return 
 
     def to_pickle(self, filename='./floatset.pkl'):
         """Write out floatset data in pickled format
