@@ -342,6 +342,11 @@ class FloatSet(object):
         else:
             kpart=zz.ravel()
             
+        gridlon=np.concatenate((self.model_grid['lon'],
+                np.array([self.model_grid['lon'][1]-self.model_grid['lon'][0]+self.model_grid['lon'][-1]])))
+        gridlat=np.concatenate((self.model_grid['lat'],
+                np.array([self.model_grid['lat'][1]-self.model_grid['lat'][0]+self.model_grid['lat'][-1]])))
+            
         # end time of integration of float (in s); note if tend = 1 floats are
         # integrated till the end of the integration;
         tend = -1;
@@ -349,45 +354,49 @@ class FloatSet(object):
         float1=0
         
         for Tnx in range(0,nTx):
-            mask=(lon > self.model_grid['lon'][Tnx]) & (lon < self.model_grid['lon'][dx*(Tnx+1)-1])
-            lon=lon[mask]
-            lat=lat[mask]
-            if self.dims!=2:
-                kpart=kpart[mask]
-                ik=np.interp(-kpart,-self.model_grid['rc'],np.arange(0,self.model_grid['rc'].size))
-            else:
-                ik=0.5
-            # number of floats
-            N = len(lon)
+             for Tny in range(0,nTy):
+                mask=((lon >= self.model_grid['lon'][dx*Tnx]) & (lon < gridlon[dx*(Tnx+1)]) &
+                     (lat >= self.model_grid['lat'][dy*Tny]) & (lat < gridlat[dy*(Tny+1)]))
+                lonmasked=lon[mask]
+                latmasked=lat[mask]
+                if self.dims!=2:
+                    kpartmasked=kpart[mask]
+                    ik=np.interp(-kpartmasked,-self.model_grid['rc'],np.arange(0,self.model_grid['rc'].size))
+                else:
+                    ik=0.5
+                # number of floats
+                N = len(lonmasked)
             
-            ilon=(lon-self.model_grid['lon'][Tnx])/(self.model_grid['lon'][Tnx+1]-self.model_grid['lon'][Tnx])
-            ilat=(lon-self.model_grid['lat'][0])/(self.model_grid['lat'][1]-self.model_grid['lat'][0])
+                ilon=(lonmasked-self.model_grid['lon'][Tnx*dx])/(
+                    gridlon[Tnx*dx+1]-self.model_grid['lon'][Tnx*dx])+0.5
+                ilat=(latmasked-self.model_grid['lat'][Tny*dy])/(
+                    gridlat[Tny*dy+1]-self.model_grid['lat'][Tny*dy])+0.5
 
-            output_dtype = np.dtype(dtype)
-            # for all the float data
-            flt_matrix = np.zeros((N+1,9), dtype=output_dtype)
+                output_dtype = np.dtype(dtype)
+                # for all the float data
+                flt_matrix = np.zeros((N+1,9), dtype=output_dtype)
 
-            flt_matrix[1:,0] = np.arange(N)+1+float1
-            flt_matrix[1:,1] = tstart
-            flt_matrix[1:,2] = ilon
-            flt_matrix[1:,3] = ilat
-            flt_matrix[1:,4] = ik
-            flt_matrix[1:,5] = kfloat
-            flt_matrix[1:,6] = iup
-            flt_matrix[1:,7] = itop
-            flt_matrix[1:,8] = tend
+                flt_matrix[1:,0] = np.arange(N)+1+float1
+                flt_matrix[1:,1] = tstart
+                flt_matrix[1:,2] = ilon
+                flt_matrix[1:,3] = ilat
+                flt_matrix[1:,4] = ik
+                flt_matrix[1:,5] = kfloat
+                flt_matrix[1:,6] = iup
+                flt_matrix[1:,7] = itop
+                flt_matrix[1:,8] = tend
 
-            # first line in initialization file contains a record with
-            # - the number of floats on that tile in the first record
-            # - the total number of floats in the sixth record
+                # first line in initialization file contains a record with
+                # - the number of floats on that tile in the first record
+                # - the total number of floats in the sixth record
 
-            flt_matrix[0,0] = N;
-            flt_matrix[0,1] = -1
-            flt_matrix[0,4] = -1
-            flt_matrix[0,5] = N
-            flt_matrix[0,8] = -1
-            flt_matrix.tofile(filename + '.%03d' % (Tnx+1) + '.001.data')
-            float1=float1+N
+                flt_matrix[0,0] = N;
+                flt_matrix[0,1] = -1
+                flt_matrix[0,4] = -1
+                flt_matrix[0,5] = N
+                flt_matrix[0,8] = -1
+                flt_matrix.tofile(filename + '.%03d' % (Tnx+1) + '.%03d' % (Tny+1) + '.data')
+                float1=float1+N
         return 
 
     def to_pickle(self, filename='./floatset.pkl'):
@@ -436,8 +445,8 @@ class FloatSet(object):
                     An element is True iff the corresponding tracer cell grid point
                     is unmasked (ocean)
                     OR 3d array
-                'lon': 1d array of the mask grid longitudes
-                'lat': 1d array of the mask grid latitudes
+                'lon': 1d array of the grid longitudes at G points
+                'lat': 1d array of the grid latitudes at G points
                 'rc': 1d array of mask grid depths
         RETURNS
         -------
