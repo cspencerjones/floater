@@ -324,10 +324,8 @@ class FloatSet(object):
                              'got %g' % read_binary_prec )
         
 
-        if mesh == 'hex' and self.dims==3:
-            xx, yy, zz = self.get_hexmesh()
-        elif mesh == 'hex' and self.dims==2:
-            xx, yy = self.get_hexmesh()
+        if mesh == 'hex':
+            raise ValueError('hex mesh not supported for local pickups;')
         elif self.dims==3:
             xx, yy, zz = self.get_rectmesh()
         else:
@@ -397,7 +395,7 @@ class FloatSet(object):
                 flt_matrix[0,8] = -1
                 flt_matrix.tofile(filename + '.%03d' % (Tnx+1) + '.%03d' % (Tny+1) + '.data')
                 float1=float1+N
-        return 
+        return lon
 
     def to_pickle(self, filename='./floatset.pkl'):
         """Write out floatset data in pickled format

@@ -279,6 +279,9 @@ def test_to_mitgcm_format_3D(fs_3D_with_land, tmpdir):
     
 def test_to_mitgcm_format_prof(fs_3D_with_land, tmpdir):
     _actually_do_mitgcm_check_prof(fs_3D_with_land, tmpdir)
+    
+def test_to_local_pickup(fs_3D_with_land, tmpdir):
+    _actually_do_local_pickup_check(fs_3D_with_land, tmpdir)
 
 def test_pickling(fs, tmpdir):
     filename = str(tmpdir.join('pickled_floatset.pkl'))
@@ -479,3 +482,32 @@ def _actually_do_mitgcm_check_prof(single_fs, tmpdir, prec=32):
             # the actual number of floats
             array = array.reshape(-1,9)
             assert int(array[0,0]) == num_floats
+            
+            
+def _actually_do_local_pickup_check(single_fs, tmpdir, prec=32):
+    fs = single_fs
+    xx, yy, zz = fs.get_rectmesh()
+    num_floats = len(xx.ravel())
+    for iup in [-1, 0, 1]:
+        itop=900
+        kfloat=20.5
+        dx=1
+        dy=1
+        nx=fs.model_grid['land_mask'].shape[1]
+        ny=fs.model_grid['land_mask'].shape[0]
+        mesh='rect'
+        filename = str(tmpdir.join('pickup_test'))
+        fs.to_local_pickup(filename, mesh=mesh, iup=iup,
+                                read_binary_prec=prec, kfloat=kfloat, itop=itop,
+                          dx=dx,dy=dy,nx=nx,ny=ny)
+        num_in_x=nx//dx
+        num_in_y=ny//dy
+        array_size=0
+        # check the file exists
+        for i in range(0,num_in_x):
+            for j in range (0,num_in_y):
+                filenametemp=filename + '.%03d' % (i+1) + '.%03d' % (j+1) + '.data'
+                assert os.path.exists(filenametemp)
+                # check that adding all files gives correct number of floats
+                array_size = array_size+np.fromfile(filenametemp, dtype='>f%g' % (prec/8)).size
+        assert array_size==(num_floats + nx*ny )* 9
